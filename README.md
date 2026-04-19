@@ -4,6 +4,8 @@ Integrated energy system modelling for Saba Island’s 100% renewable electricit
 
 The project covers the full modelling chain: stochastic demand forecasting (RAMP) → renewable resource data (Renewables.ninja) → energy system optimisation (Calliope) → financial investment analysis.
 
+> **Note on contributions:** This was a four-person group project. My individual contributions were: (1) building the RAMP stochastic demand model from scratch (primary assigned task), (2) independently correcting and running the Calliope energy optimisation model when the team encountered configuration issues, and (3) cross-checking the financial model against Calliope outputs and catching a capacity mismatch before submission. The financial model and Renewables.ninja resource data were contributed by other team members.
+
 -----
 
 ## Files
