@@ -1,0 +1,64 @@
+import: # Import other files from paths relative to this file, or absolute paths
+  - "techs_and_locs/techs.yaml" # This file specifies the model's technologies
+  - "techs_and_locs/locations.yaml" # This file specifies the model's nodes
+ #remove this to incorporate scenarios later on - "scenarios.yaml" # Scenario and override group definitions
+
+# Model configuration: all settings that affect the built model
+config:
+  init:
+    name: Saba Power System 2035
+    # What version of Calliope this model is intended for
+    calliope_version: 0.7.0.dev7
+    subset.timesteps: ["2035-01-01", "2035-12-31"] # 2035 target year
+    broadcast_input_data: False
+    extra_math: ["operate"]
+#    datetime_format: "%Y-%m-%d %H:%M:%S+00:00"
+    mode: base # You can choose either "base", or "operate"
+
+  build:
+    ensure_feasibility: false # Switches on/off the "unmet demand" constraint
+
+  solve:
+    solver: gurobi
+    zero_threshold: 1e-10 # Any value coming out of the backend that is smaller than this (due to floating point errors, probably) will be set to zero
+    shadow_prices: ["system_balance"] # Asks the solver to return also the shadow prices for a selected constraint (e.g., "system_balance") as part of the solution. See: https://calliope.readthedocs.io/en/latest/advanced/shadow_prices/
+
+    solver_options: 
+        Threads: 6
+        Method: 2 # use barrier, but do not run simplex in parallel
+        Crossover: 0 # stop after barrier, do not perform crossover
+        FeasibilityTol: 1e-3
+        OptimalityTol: 1e-4
+        BarConvTol: 1e-4
+
+data_definitions:
+  objective_cost_weights:
+    data: 1
+    index: monetary
+    dims: costs
+  # `bigM` sets the scale of unmet demand, which cannot be too high, otherwise the optimisation will not converge
+  bigM: 1e6
+
+
+
+data_tables:
+  demand:
+    data: techs_and_locs/demand/saba_demand_median_v2.csv  # RAMP v2 2035 median demand
+    rows: timesteps
+    columns: [parameters]
+    add_dims:
+      nodes: FRA
+      techs: demand_power
+
+
+  renewables:
+    data: energy_sources/renewables2.csv
+    rows: timesteps
+    # We vertellen Calliope dat de kolommen 'solar_pv' en 'wind' 
+    # de data zijn voor de parameter 'source_use_equals'
+    columns: [techs]
+    add_dims:
+      nodes: FRA
+      parameters: source_use_equals
+
+

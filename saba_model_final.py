@@ -1,0 +1,71 @@
+
+import os, calliope, pandas as pd, matplotlib.pyplot as plt, matplotlib.dates as mdates, warnings
+warnings.filterwarnings("ignore")
+os.chdir(os.path.dirname(os.path.abspath(__file__)))  # Set working dir to script location
+calliope.set_log_verbosity("WARNING", include_solver_output=False)
+print("=" * 60)
+print("SABA ISLAND ENERGY SYSTEM MODEL - 2035")
+print("=" * 60)
+print("\n[1/3] Loading model...")
+model = calliope.read_yaml("modelsaba.yaml")
+print("[2/3] Building...")
+model.build()
+print("[3/3] Solving with Gurobi...")
+model.solve()
+print("      Solved!\n")
+total_cost = model.results.cost.sel(costs="monetary").sum().item()
+diesel_flow_in = model.results.flow_in.sel(techs="fossil", nodes="FRA", carriers="power").sum().item()
+diesel_fuel_cost = diesel_flow_in * 0.30
+diesel_generation = model.results.flow_out.sel(techs="fossil", nodes="FRA", carriers="power").sum().item()
+solar_gen = model.results.flow_out.sel(techs="solar_pv", nodes="FRA", carriers="power").sum().item()
+wind_gen = model.results.flow_out.sel(techs="wind", nodes="FRA", carriers="power").sum().item()
+battery_out = model.results.flow_out.sel(techs="battery", nodes="FRA", carriers="power").sum().item()
+total_gen = diesel_generation + solar_gen + wind_gen + battery_out
+total_demand = abs(model.results.flow_in.sel(techs="demand_power", nodes="FRA", carriers="power").sum().item())
+load_shed = model.results.flow_out.sel(techs="load_shedding", nodes="FRA", carriers="power").sum().item()
+print("=" * 60)
+print("FINANCIAL SUMMARY")
+print("=" * 60)
+print(f"  Total demand:               {total_demand:>10,.1f} MWh")
+print(f"  Load shedding:              {load_shed:>10,.1f} MWh")
+print(f"  Diesel generation:          {diesel_generation:>10,.1f} MWh  ({diesel_generation/total_gen*100:.1f}%)")
+print(f"  Solar PV generation:        {solar_gen:>10,.1f} MWh  ({solar_gen/total_gen*100:.1f}%)")
+print(f"  Wind generation:            {wind_gen:>10,.1f} MWh  ({wind_gen/total_gen*100:.1f}%)")
+print(f"  Battery discharge:          {battery_out:>10,.1f} MWh  ({battery_out/total_gen*100:.1f}%)")
+print(f"  Diesel fuel cost (model):   {diesel_fuel_cost:>10,.1f} kEUR/yr")
+print(f"  Total system cost (model):  {total_cost:>10,.1f} kEUR/yr")
+print(f"  Real diesel cost (2019):    ~$1,500,000 USD/yr")
+print(f"  Real generation cost:       ~$0.51/kWh")
+production = model.results.flow_out.sel(nodes="FRA", carriers="power").to_series().unstack("techs").fillna(0)
+colors = {"solar_pv":"#FFD700","wind":"#4A90D9","battery":"#7B68EE","fossil":"#8B5A2B","load_shedding":"#FF0000"}
+tech_order = ["solar_pv","wind","battery","fossil","load_shedding"]
+tech_labels = {"solar_pv":"Solar PV","wind":"Wind","battery":"Battery","fossil":"Diesel","load_shedding":"Load Shedding"}
+fig, axes = plt.subplots(3, 1, figsize=(14, 14))
+fig.suptitle("Saba Island Energy System Model - 2035", fontsize=14, fontweight="bold")
+periods = [("2035-01-07","2035-01-13","January 2035"),("2035-06-03","2035-06-09","June 2035"),("2035-12-03","2035-12-09","December 2035")]
+for ax, (start, end, title) in zip(axes, periods):
+    subset = production.loc[start:end, [t for t in tech_order if t in production.columns]].rename(columns=tech_labels)
+    subset.plot(kind="area", ax=ax, color=[colors[t] for t in tech_order if t in production.columns], alpha=0.85, linewidth=0.5)
+    ax.set_title(title, fontsize=11); ax.set_ylabel("MW"); ax.set_xlabel(""); ax.legend(loc="upper right", fontsize=8)
+    ax.xaxis.set_major_formatter(mdates.DateFormatter("%b %d")); ax.grid(axis="y", alpha=0.3)
+plt.tight_layout()
+plt.savefig("production_mix_weekly.png", dpi=150, bbox_inches="tight")
+plt.close()
+print("  Saved: production_mix_weekly.png")
+gen_data = {k:v for k,v in {"Solar PV":solar_gen,"Wind":wind_gen,"Battery":battery_out,"Diesel":diesel_generation}.items() if v>0}
+fig2, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
+fig2.suptitle("Saba Island - Annual Energy Summary 2035", fontsize=13, fontweight="bold")
+ax1.pie(gen_data.values(), labels=gen_data.keys(), colors=["#FFD700","#4A90D9","#7B68EE","#8B5A2B"][:len(gen_data)], autopct="%1.1f%%", startangle=90)
+ax1.set_title("Generation Mix (MWh)")
+cost_data = {"Diesel Fuel (model)":diesel_fuel_cost,"Total System Cost":total_cost,"Real Diesel Cost":1500}
+bars = ax2.bar(cost_data.keys(), cost_data.values(), color=["#8B5A2B","#4A90D9","#FF6B6B"])
+ax2.set_ylabel("kEUR / year"); ax2.set_title("Cost Comparison"); ax2.grid(axis="y", alpha=0.3)
+for bar, val in zip(bars, cost_data.values()):
+    ax2.text(bar.get_x()+bar.get_width()/2, bar.get_height()+10, f"{val:,.0f}", ha="center", va="bottom", fontsize=9)
+plt.tight_layout()
+plt.savefig("annual_summary.png", dpi=150, bbox_inches="tight")
+plt.close()
+print("  Saved: annual_summary.png")
+print("=" * 60)
+print("ALL DONE!")
+print("=" * 60)
